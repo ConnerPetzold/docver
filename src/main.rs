@@ -5,6 +5,8 @@ use clap::{Args, Parser};
 use crate::commands::Command;
 
 mod commands;
+mod git;
+mod versions;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -17,6 +19,7 @@ struct Cli {
 }
 
 #[derive(Debug, Args)]
+#[command(next_help_heading = "Global Options")]
 struct GitArgs {
     #[arg(short, long, default_value = "origin", global = true)]
     remote: String,
