@@ -2,6 +2,7 @@
 name = "docver"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/ConnerPetzold/docver"
 
 [dependencies]
 anyhow = "1.0.99"
@@ -11,3 +12,8 @@ git_cmd = "0.6.25"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 walkdir = "2.5.0"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

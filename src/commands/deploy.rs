@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::Args;
+use git_cmd::git_in_dir;
 use walkdir::WalkDir;
 
 use crate::{GitArgs, git::Commit, versions::Versions};
@@ -25,8 +26,7 @@ pub struct DeployArgs {
 
 impl DeployArgs {
     pub fn execute(&self, git_args: GitArgs) -> anyhow::Result<()> {
-        let repo = git_cmd::Repo::new(".")?;
-        let commit_sha = repo.git(&["rev-parse", "--short", "HEAD"])?;
+        let commit_sha = git_in_dir(".".into(), &["show", "-s", "--format=%h"])?;
 
         let message = git_args.message.clone().unwrap_or(format!(
             "Deployed {} to {}{} with docver {}",
@@ -40,15 +40,17 @@ impl DeployArgs {
             env!("CARGO_PKG_VERSION")
         ));
 
-        let mut versions: Versions = repo
-            .git(&[
+        let mut versions: Versions = git_in_dir(
+            ".".into(),
+            &[
                 "show",
                 format!("{}:{}", git_args.branch, VERSIONS_FILE).as_str(),
-            ])
-            .and_then(|s| {
-                serde_json::from_str(&s).context(format!("Failed to parse {}", VERSIONS_FILE))
-            })
-            .unwrap_or_default();
+            ],
+        )
+        .and_then(|s| {
+            serde_json::from_str(&s).context(format!("Failed to parse {}", VERSIONS_FILE))
+        })
+        .unwrap_or_default();
 
         versions.add(
             self.version.clone(),
@@ -69,25 +71,16 @@ impl DeployArgs {
             .map(|alias| deploy_prefix.join(alias))
             .collect::<Vec<_>>();
 
-        // Build a fast-import commit that adds all files under `self.path`
-        // into `main_version_path` and each of the `alias_paths`.
-        let mut commit = Commit::new(
-            repo.directory().as_str(),
-            format!("refs/heads/{}", git_args.branch),
-        )
-        .message(message.clone())
-        .delete_all();
+        let mut commit = Commit::new(".", format!("refs/heads/{}", git_args.branch))
+            .message(message.clone())
+            .delete_all();
 
-        // We start from an empty tree so the commit only contains what we add
-
-        // Add versions file at repository root
         commit = commit.add_bytes(VERSIONS_FILE, 0o100644, versions_json.into_bytes());
-        // Copy root .gitignore if present
+
         if std::path::Path::new(".gitignore").exists() {
             commit = commit.add_file(".gitignore", ".gitignore")?;
         }
 
-        // Walk source directory and add files to the commit under each destination root
         for entry in WalkDir::new(&self.path)
             .follow_links(false)
             .into_iter()
@@ -100,19 +93,23 @@ impl DeployArgs {
             // main version
             let dest = main_version_path.join(rel);
             let dest_str = dest.to_string_lossy().to_string();
-            dbg!(&dest_str);
             commit = commit.add_file(dest_str, path)?;
             // aliases
             for alias_root in &alias_paths {
                 let dest = alias_root.join(rel);
                 let dest_str = dest.to_string_lossy().to_string();
-                dbg!(&dest_str);
                 commit = commit.add_file(dest_str, path)?;
             }
         }
 
-        // Execute the fast-import
         commit.run()?;
+
+        if git_args.push {
+            git_in_dir(
+                ".".into(),
+                &["push", git_args.remote.as_str(), git_args.branch.as_str()],
+            )?;
+        }
 
         Ok(())
     }

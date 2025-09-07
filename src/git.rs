@@ -45,37 +45,12 @@ impl Commit {
         self
     }
 
-    pub fn author(
-        mut self,
-        name: impl Into<String>,
-        email: impl Into<String>,
-        when: impl Into<String>,
-    ) -> Self {
-        self.author = Some((name.into(), email.into(), when.into()));
-        self
-    }
-
-    pub fn committer(
-        mut self,
-        name: impl Into<String>,
-        email: impl Into<String>,
-        when: impl Into<String>,
-    ) -> Self {
-        self.committer = Some((name.into(), email.into(), when.into()));
-        self
-    }
-
     pub fn now_when() -> String {
         let secs: i64 = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         format!("{} +0000", secs)
-    }
-
-    pub fn from(mut self, base: impl Into<String>) -> Self {
-        self.from = Some(base.into());
-        self
     }
 
     pub fn delete_all(mut self) -> Self {

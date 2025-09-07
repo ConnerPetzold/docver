@@ -1,0 +1,60 @@
+name: Publish Docs
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-docs:
+    runs-on: ubuntu-latest
+    env:
+      PLAN: ${{ inputs.plan }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install docver via PLAN installer hint
+        run: |
+          set -euo pipefail
+          mkdir -p tools/bin
+          # Extract the curl | sh installer from the dist PLAN using jq
+          INSTALLER_HINT=$(echo "$PLAN" | jq -r 'try .releases[0].artifacts["docver-installer.sh"].install_hint // empty')
+          if [ -z "$INSTALLER_HINT" ]; then
+            # Fallback: parse from announcement_github_body code block
+            INSTALLER_HINT=$(echo "$PLAN" | jq -r '.announcement_github_body' | sed -n '/```sh/,/```/p' | grep -E "curl .*installer\\.sh" | head -n1)
+          fi
+          if [ -z "$INSTALLER_HINT" ]; then
+            echo "No installer hint found in PLAN" >&2
+            exit 1
+          fi
+          echo "Running installer: $INSTALLER_HINT"
+          bash -c "$INSTALLER_HINT"
+          # Ensure we can invoke the installed binary; copy into a local tools/bin for stable path
+          DOCBIN="$(command -v docver || true)"
+          if [ -z "$DOCBIN" ]; then
+            DOCBIN="$(find "$HOME" "$GITHUB_WORKSPACE" -maxdepth 4 -type f -name docver 2>/dev/null | head -n1)"
+          fi
+          test -n "$DOCBIN" || { echo "docver not found after install" >&2; exit 1; }
+          cp "$DOCBIN" tools/bin/docver
+          chmod +x tools/bin/docver
+          echo "tools/bin" >> "$GITHUB_PATH"
+
+      - name: Build docs (optional)
+        run: |
+          echo "Build any site generator here if needed"
+
+      - name: Deploy using local docver
+        uses: ConnerPetzold/docver-publish@v0.1.0
+        with:
+          docver-path: tools/bin/docver
+          path: out
+          version: ${{ github.ref_name }}
+          push: true
