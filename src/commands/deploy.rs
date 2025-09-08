@@ -22,6 +22,9 @@ pub struct DeployArgs {
 
     #[arg(short, long, default_value = "false")]
     update_aliases: bool,
+
+    #[arg(long, default_value = "latest")]
+    default_alias: String,
 }
 
 impl DeployArgs {
@@ -65,20 +68,29 @@ impl DeployArgs {
 
         let main_version_path = deploy_prefix.join(self.version.clone());
 
-        let alias_paths = self
-            .aliases
-            .iter()
-            .map(|alias| deploy_prefix.join(alias))
-            .collect::<Vec<_>>();
-
         let mut commit = Commit::new(".", format!("refs/heads/{}", git_args.branch))
             .message(message.clone())
             .delete_all();
 
         commit = commit.add_bytes(VERSIONS_FILE, 0o100644, versions_json.into_bytes());
 
+        let rewrites = versions.netlify_rewrites(self.default_alias.clone());
+        commit = commit.add_bytes("_redirects", 0o100644, rewrites.into_bytes());
+
         if std::path::Path::new(".gitignore").exists() {
             commit = commit.add_file(".gitignore", ".gitignore")?;
+        }
+
+        if git_in_dir(
+            ".".into(),
+            &[
+                "show",
+                format!("{}:{}", git_args.branch, ".nojekyll").as_str(),
+            ],
+        )
+        .is_err()
+        {
+            commit = commit.add_bytes(".nojekyll", 0o100644, Vec::<u8>::new());
         }
 
         for entry in WalkDir::new(&self.path)
@@ -89,17 +101,9 @@ impl DeployArgs {
         {
             let path = entry.path();
             let rel = path.strip_prefix(&self.path).unwrap();
-
-            // main version
             let dest = main_version_path.join(rel);
             let dest_str = dest.to_string_lossy().to_string();
             commit = commit.add_file(dest_str, path)?;
-            // aliases
-            for alias_root in &alias_paths {
-                let dest = alias_root.join(rel);
-                let dest_str = dest.to_string_lossy().to_string();
-                commit = commit.add_file(dest_str, path)?;
-            }
         }
 
         commit.run()?;

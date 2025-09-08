@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -37,6 +38,29 @@ impl Versions {
         self.versions.insert(version_tag.clone(), version);
 
         self.versions.get(&version_tag)
+    }
+
+    pub fn netlify_rewrites(&self, default_alias: String) -> String {
+        let mut result = String::new();
+        let mut default_version: Option<Version> = None;
+
+        for version in self.versions.values() {
+            for alias in &version.aliases {
+                writeln!(result, "/{}/* /{}/:splat 200", alias, version.version)
+                    .expect("Failed to write to netlify redirects string");
+
+                if *alias == default_alias {
+                    default_version = Some(version.clone());
+                }
+            }
+        }
+
+        if let Some(default_version) = default_version {
+            writeln!(result, "/* /{}/:splat 200", default_version.version)
+                .expect("Failed to write to netlify redirects string");
+        }
+
+        result
     }
 }
 
