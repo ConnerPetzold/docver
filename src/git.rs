@@ -56,11 +56,6 @@ impl Commit {
         format!("{} +0000", secs)
     }
 
-    pub fn delete_all(mut self) -> Self {
-        self.delete_all = true;
-        self
-    }
-
     pub fn parent(mut self, commit: impl Into<String>) -> Self {
         self.from = Some(commit.into());
         self

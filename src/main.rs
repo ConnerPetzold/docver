@@ -6,7 +6,7 @@ use crate::commands::Command;
 
 mod commands;
 mod git;
-mod versions;
+pub mod versions;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -42,6 +42,12 @@ struct GitArgs {
     /// Optional prefix directory under which to place deployed files
     #[arg(long, global = true)]
     deploy_prefix: Option<PathBuf>,
+}
+
+impl GitArgs {
+    pub fn remote_rev(&self) -> String {
+        format!("{}/{}", self.remote, self.branch)
+    }
 }
 
 fn main() -> anyhow::Result<()> {
