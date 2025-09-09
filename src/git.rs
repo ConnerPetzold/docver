@@ -21,6 +21,7 @@ pub struct Commit {
     message: String,
     from: Option<String>,
     delete_all: bool,
+    deletes: BTreeMap<String, ()>,
     files: BTreeMap<String, FileEntry>,
 }
 
@@ -39,6 +40,7 @@ impl Commit {
             message: String::new(),
             from: None,
             delete_all: false,
+            deletes: BTreeMap::new(),
             files: BTreeMap::new(),
         }
     }
@@ -56,13 +58,13 @@ impl Commit {
         format!("{} +0000", secs)
     }
 
-    pub fn delete_all(mut self) -> Self {
-        self.delete_all = true;
+    pub fn parent(mut self, commit: impl Into<String>) -> Self {
+        self.from = Some(commit.into());
         self
     }
 
-    pub fn parent(mut self, commit: impl Into<String>) -> Self {
-        self.from = Some(commit.into());
+    pub fn delete_path(mut self, path: impl AsRef<str>) -> Self {
+        self.deletes.insert(path.as_ref().to_string(), ());
         self
     }
 
@@ -139,6 +141,10 @@ impl Commit {
         }
         if self.delete_all {
             writeln!(w, "deleteall")?;
+        }
+
+        for (path, _) in &self.deletes {
+            writeln!(w, "D {}", path)?;
         }
 
         for (path, entry) in &self.files {

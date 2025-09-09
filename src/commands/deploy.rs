@@ -5,9 +5,11 @@ use clap::Args;
 use git_cmd::git_in_dir;
 use walkdir::WalkDir;
 
-use crate::{GitArgs, git::Commit, versions::Versions};
-
-const VERSIONS_FILE: &str = "versions.json";
+use crate::{
+    GitArgs,
+    git::Commit,
+    versions::{VERSIONS_FILE, Versions},
+};
 
 #[derive(Debug, Args)]
 /// Deploy a built static site version to the target branch
@@ -43,31 +45,13 @@ impl DeployArgs {
             env!("CARGO_PKG_VERSION")
         ));
 
-        // Ensure we have the latest remote tip and prefer reading from it
-        let _ = git_in_dir(
+        git_in_dir(
             ".".into(),
             &["fetch", git_args.remote.as_str(), git_args.branch.as_str()],
-        );
+        )?;
 
-        let remote_rev = format!("{}/{}", git_args.remote, git_args.branch);
-
-        let mut versions: Versions = git_in_dir(
-            ".".into(),
-            &["show", format!("{}:{}", remote_rev, VERSIONS_FILE).as_str()],
-        )
-        .or_else(|_| {
-            git_in_dir(
-                ".".into(),
-                &[
-                    "show",
-                    format!("{}:{}", git_args.branch, VERSIONS_FILE).as_str(),
-                ],
-            )
-        })
-        .and_then(|s| {
-            serde_json::from_str(&s).context(format!("Failed to parse {}", VERSIONS_FILE))
-        })
-        .unwrap_or_default();
+        let remote_rev = git_args.remote_rev();
+        let mut versions: Versions = Versions::from_git(&remote_rev);
 
         versions.add(
             self.version.clone(),
@@ -120,6 +104,8 @@ impl DeployArgs {
         {
             commit = commit.add_bytes(".nojekyll", 0o100644, Vec::<u8>::new());
         }
+
+        commit = commit.delete_path(main_version_path.to_string_lossy());
 
         for entry in WalkDir::new(&self.path)
             .follow_links(false)
