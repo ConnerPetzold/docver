@@ -43,13 +43,27 @@ impl DeployArgs {
             env!("CARGO_PKG_VERSION")
         ));
 
+        // Ensure we have the latest remote tip and prefer reading from it
+        let _ = git_in_dir(
+            ".".into(),
+            &["fetch", git_args.remote.as_str(), git_args.branch.as_str()],
+        );
+
+        let remote_rev = format!("{}/{}", git_args.remote, git_args.branch);
+
         let mut versions: Versions = git_in_dir(
             ".".into(),
-            &[
-                "show",
-                format!("{}:{}", git_args.branch, VERSIONS_FILE).as_str(),
-            ],
+            &["show", format!("{}:{}", remote_rev, VERSIONS_FILE).as_str()],
         )
+        .or_else(|_| {
+            git_in_dir(
+                ".".into(),
+                &[
+                    "show",
+                    format!("{}:{}", git_args.branch, VERSIONS_FILE).as_str(),
+                ],
+            )
+        })
         .and_then(|s| {
             serde_json::from_str(&s).context(format!("Failed to parse {}", VERSIONS_FILE))
         })
@@ -68,9 +82,16 @@ impl DeployArgs {
 
         let main_version_path = deploy_prefix.join(self.version.clone());
 
-        let mut commit = Commit::new(".", format!("refs/heads/{}", git_args.branch))
-            .message(message.clone())
-            .delete_all();
+        let parent_head = git_in_dir(".".into(), &["rev-parse", remote_rev.as_str()])
+            .or_else(|_| git_in_dir(".".into(), &["rev-parse", git_args.branch.as_str()]))
+            .ok();
+
+        let mut commit =
+            Commit::new(".", format!("refs/heads/{}", git_args.branch)).message(message.clone());
+
+        if let Some(parent) = parent_head {
+            commit = commit.parent(parent.trim().to_string());
+        }
 
         commit = commit.add_bytes(VERSIONS_FILE, 0o100644, versions_json.into_bytes());
 
@@ -84,11 +105,17 @@ impl DeployArgs {
 
         if git_in_dir(
             ".".into(),
-            &[
-                "show",
-                format!("{}:{}", git_args.branch, ".nojekyll").as_str(),
-            ],
+            &["show", format!("{}:{}", remote_rev, ".nojekyll").as_str()],
         )
+        .or_else(|_| {
+            git_in_dir(
+                ".".into(),
+                &[
+                    "show",
+                    format!("{}:{}", git_args.branch, ".nojekyll").as_str(),
+                ],
+            )
+        })
         .is_err()
         {
             commit = commit.add_bytes(".nojekyll", 0o100644, Vec::<u8>::new());
@@ -109,11 +136,20 @@ impl DeployArgs {
 
         commit.run()?;
 
+        // Print a concise success message for local import
+        println!("Deployed to {} (local).", git_args.branch);
+
         if git_args.push {
             git_in_dir(
                 ".".into(),
                 &["push", git_args.remote.as_str(), git_args.branch.as_str()],
             )?;
+
+            // Print a concise success message for push
+            println!(
+                "Pushed {} to {}:{}",
+                git_args.branch, git_args.remote, git_args.branch
+            );
         }
 
         Ok(())

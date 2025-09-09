@@ -61,6 +61,11 @@ impl Commit {
         self
     }
 
+    pub fn parent(mut self, commit: impl Into<String>) -> Self {
+        self.from = Some(commit.into());
+        self
+    }
+
     pub fn add_bytes(
         mut self,
         path: impl AsRef<str>,
@@ -173,7 +178,21 @@ impl Commit {
             .context("failed to wait on git fast-import")?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("git fast-import failed: {}", stderr.trim());
+            let stderr_trimmed = stderr.trim();
+
+            // Provide a more readable hint for common non-fast-forward failures
+            if stderr_trimmed.contains("Not updating")
+                && (stderr_trimmed.contains("does not contain")
+                    || stderr_trimmed.contains("non-fast-forward"))
+            {
+                anyhow::bail!(
+                    "git fast-import refused to update {} (non-fast-forward). The new commit must descend from the current branch tip. Hint: base the import on the tip (set a parent) or recreate/reset the branch.\nFull error: {}",
+                    self.refname,
+                    stderr_trimmed
+                );
+            }
+
+            anyhow::bail!("git fast-import failed: {}", stderr_trimmed);
         }
         Ok(())
     }
