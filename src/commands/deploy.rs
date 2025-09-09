@@ -10,21 +10,20 @@ use crate::{GitArgs, git::Commit, versions::Versions};
 const VERSIONS_FILE: &str = "versions.json";
 
 #[derive(Debug, Args)]
+/// Deploy a built static site version to the target branch
 pub struct DeployArgs {
+    /// Path to the directory containing the built site to deploy
     path: PathBuf,
 
+    /// Version identifier for this deployment (e.g. "v1.2.3" or "1.0")
     version: String,
 
+    /// Additional aliases that should point to this version (e.g. "latest")
     aliases: Vec<String>,
 
+    /// Optional human-readable title for this version
     #[arg(short, long)]
     title: Option<String>,
-
-    #[arg(short, long, default_value = "false")]
-    update_aliases: bool,
-
-    #[arg(long, default_value = "latest")]
-    default_alias: String,
 }
 
 impl DeployArgs {
@@ -32,7 +31,7 @@ impl DeployArgs {
         let commit_sha = git_in_dir(".".into(), &["show", "-s", "--format=%h"])?;
 
         let message = git_args.message.clone().unwrap_or(format!(
-            "Deployed {} to {}{} with docver {}",
+            "Deployed {} to {}{} with {} {}",
             commit_sha,
             self.version,
             git_args
@@ -40,6 +39,7 @@ impl DeployArgs {
                 .as_ref()
                 .map(|p| format!("in {}", p.display()))
                 .unwrap_or_default(),
+            env!("CARGO_PKG_NAME"),
             env!("CARGO_PKG_VERSION")
         ));
 
@@ -74,7 +74,8 @@ impl DeployArgs {
 
         commit = commit.add_bytes(VERSIONS_FILE, 0o100644, versions_json.into_bytes());
 
-        let rewrites = versions.netlify_rewrites(self.default_alias.clone());
+        // TODO: make the default alias configurable
+        let rewrites = versions.netlify_rewrites("latest".into());
         commit = commit.add_bytes("_redirects", 0o100644, rewrites.into_bytes());
 
         if std::path::Path::new(".gitignore").exists() {

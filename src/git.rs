@@ -9,6 +9,9 @@ use std::{
 
 use anyhow::{Context, Result};
 
+const DEFAULT_AUTHOR_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "[bot]");
+const DEFAULT_AUTHOR_EMAIL: &str = concat!(env!("CARGO_PKG_NAME"), "[bot]@users.noreply.github.io");
+
 #[derive(Debug, Clone)]
 pub struct Commit {
     repo_dir: PathBuf,
@@ -90,13 +93,11 @@ impl Commit {
         }
         let name = get_env_value("AUTHOR", "NAME")
             .or_else(|| get_env_value("COMMITTER", "NAME"))
-            .unwrap_or_else(|| "docver".to_string());
+            .unwrap_or_else(|| DEFAULT_AUTHOR_NAME.to_string());
         let email = get_env_value("AUTHOR", "EMAIL")
             .or_else(|| get_env_value("COMMITTER", "EMAIL"))
-            .unwrap_or_else(|| "noreply@example.com".to_string());
-        let when = std::env::var("GIT_AUTHOR_DATE")
-            .ok()
-            .unwrap_or_else(Self::now_when);
+            .unwrap_or_else(|| DEFAULT_AUTHOR_EMAIL.to_string());
+        let when = get_env_value("AUTHOR", "DATE").unwrap_or_else(Self::now_when);
         (name, email, when)
     }
 
@@ -112,9 +113,7 @@ impl Commit {
         let name = get_env_value("COMMITTER", "NAME").unwrap_or_else(|| default_name.to_string());
         let email =
             get_env_value("COMMITTER", "EMAIL").unwrap_or_else(|| default_email.to_string());
-        let when = std::env::var("GIT_COMMITTER_DATE")
-            .ok()
-            .unwrap_or_else(|| default_when.to_string());
+        let when = get_env_value("COMMITTER", "DATE").unwrap_or_else(|| default_when.to_string());
         (name, email, when)
     }
 

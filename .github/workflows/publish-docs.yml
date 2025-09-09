@@ -21,28 +21,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install docver
+      - name: Install versite
         uses: sigoden/install-binary@v1
         with:
           repo: ${{ github.repository }}
           tag: ${{ github.ref_name }}
-          name: docver
+          name: versite
 
-      - name: Resolve docver path
+      - name: Resolve versite path
         run: |
           set -euo pipefail
-          DOCBIN="$(command -v docver)"
+          DOCBIN="$(command -v versite)"
           test -n "$DOCBIN"
-          echo "DOCVER_BIN=$DOCBIN" >> "$GITHUB_ENV"
+          echo "VERSITE_BIN=$DOCBIN" >> "$GITHUB_ENV"
 
       - name: Build docs (optional)
         run: |
           echo "Build any site generator here if needed"
 
-      - name: Deploy using docver
-        uses: ConnerPetzold/docver-publish@v0.1.0
+      - name: Deploy using versite
+        uses: ConnerPetzold/versite-publish@v0.1.0
         with:
-          docver-path: ${{ env.DOCVER_BIN }}
+          versite-path: ${{ env.VERSITE_BIN }}
           path: out
           version: ${{ github.ref_name }}
           aliases: latest
